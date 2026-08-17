@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n-runner
+spec:
+  selector:
+    matchLabels:
+      app: n8n-runner
+  template:
+    metadata:
+      labels:
+        app: n8n-runner
+    spec:
+      containers:
+      - name: n8n-runner
+        image: n8nio/runners:stable
+        env:
+        - name: N8N_RUNNERS_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: n8n-runners-auth-token
+        - name: N8N_RUNNERS_TASK_BROKER_URI
+          value: http://n8n:5679
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "500m"

@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+spec:
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      containers:
+      - name: n8n
+        image: docker.n8n.io/n8nio/n8n:stable
+        env:
+        - name: DB_TYPE
+          value: postgresdb
+        - name: DB_POSTGRESDB_HOST
+          value: postgres-svc
+        - name: DB_POSTGRESDB_PORT
+          value: "5432"
+        - name: DB_POSTGRESDB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_DB
+        - name: DB_POSTGRESDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: db-nonroot-user
+        - name: DB_POSTGRESDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: db-nonroot-password
+        - name: N8N_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: encryption-key
+        - name: N8N_HOST
+          value: n8n.dhairya.co
+          # value: 192.168.29.135
+        - name: N8N_PORT
+          value: "5678"
+        - name: N8N_RUNNERS_MODE
+          value: "external"
+        - name: N8N_RUNNERS_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: n8n-runners-auth-token
+        - name: N8N_RUNNERS_BROKER_LISTEN_ADDRESS
+          value: "0.0.0.0"
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+          requests:
+            memory: "1Gi"
+            cpu: "1"
+        ports:
+        - containerPort: 5678
+        - containerPort: 5679
+        volumeMounts:
+          - name: n8n-storage
+            mountPath: /home/node/.n8n
+      volumes:
+        - name:  n8n-storage
+          persistentVolumeClaim:
+            claimName: n8n-pvc
+            readOnly: false

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole
+  namespace: pihole
+  annotations:
+    # This locks Pi-hole to this specific LAN IP
+    metallb.io/loadBalancerIPs: 192.168.29.129
+spec:
+  selector:
+    app: pihole
+  externalTrafficPolicy: Local
+  ports:
+    - name: dns-udp
+      port: 53
+      protocol: UDP
+      targetPort: 53
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+      targetPort: 53
+    - name: dashboard
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: dashboard-ssl
+      port: 443
+      protocol: TCP
+      targetPort: 443
+  type: LoadBalancer

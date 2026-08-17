@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n-runner
+spec:
+  selector:
+    app: n8n-runner
+  ports:
+  - port: 5678
+    targetPort: 5678
+    protocol: TCP
+    name: http
+  type: ClusterIP

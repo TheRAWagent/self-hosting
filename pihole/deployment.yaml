@@ -1,0 +1,102 @@
+# 4. Deployment
+# IMPORTANT: replicas must stay at 1 because port 53 is bound via
+# hostPort — two replicas on the same node would conflict.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole
+  namespace: pihole
+  labels:
+    app: pihole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pihole
+  strategy:
+    type: Recreate          # avoid two pods running simultaneously
+  template:
+    metadata:
+      labels:
+        app: pihole
+    spec:
+      # Tolerate being scheduled on control-plane nodes if needed
+      # tolerations:
+      #   - key: node-role.kubernetes.io/control-plane
+      #     operator: Exists
+      #     effect: NoSchedule
+ 
+      containers:
+        - name: pihole
+          image: pihole/pihole:latest
+          imagePullPolicy: Always
+ 
+          ports:
+            # DNS — bound directly to the host NIC via hostPort so that
+            # every device on your network can reach port 53 on this node's IP.
+            - name: dns-tcp
+              containerPort: 53
+              hostPort: 53
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 53
+              hostPort: 53
+              protocol: UDP
+            # Web UI — exposed via the Service below (no hostPort needed)
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+ 
+          env:
+            - name: TZ
+              value: "Asia/Kolkata"                  # ← change to your timezone
+            - name: FTLCONF_dns_listeningMode
+              value: "ALL"
+            - name: FTLCONF_webserver_api_password
+              valueFrom:
+                secretKeyRef:
+                  name: pihole-secret
+                  key: FTLCONF_webserver_api_password
+
+          volumeMounts:
+            - name: pihole-etc
+              mountPath: /etc/pihole
+ 
+          # Replaces docker-compose cap_add
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN   # required for DHCP (optional if DNS-only)
+                - SYS_TIME    # required for NTP client mode
+                - SYS_NICE    # optional — gives Pi-hole scheduling priority
+ 
+          # Basic liveness/readiness probes
+          readinessProbe:
+            httpGet:
+              path: /admin
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /admin
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 20
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "500m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+ 
+      volumes:
+        - name: pihole-etc
+          persistentVolumeClaim:
+            claimName: pihole-etc
+ 

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: n8n-config
+data:
+  n8n-version: "stable"
+  node-functions-allow-external: "cheerio"
