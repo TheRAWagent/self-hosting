@@ -14,6 +14,7 @@ spec:
       containers:
       - name: n8n
         image: docker.n8n.io/n8nio/n8n:stable
+        imagePullPolicy: Always
         env:
         - name: DB_TYPE
           value: postgresdb
@@ -43,9 +44,8 @@ spec:
               key: encryption-key
         - name: N8N_HOST
           value: n8n.dhairya.co
-          # value: 192.168.29.135
         - name: N8N_PORT
-          value: "5678"
+          value: "80"
         - name: N8N_RUNNERS_MODE
           value: "external"
         - name: N8N_RUNNERS_AUTH_TOKEN

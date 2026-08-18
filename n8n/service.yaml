@@ -12,8 +12,8 @@ spec:
     targetPort: 5679
     protocol: TCP
     name: broker
-  - port: 5678
-    targetPort: 5678
+  - port: 80
+    targetPort: 80
     protocol: TCP
     name: http
   type: LoadBalancer
