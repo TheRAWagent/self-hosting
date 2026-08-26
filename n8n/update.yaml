@@ -1,0 +1,95 @@
+---
+# ServiceAccount for the CronJob
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: n8n-restart-agent
+  namespace: n8n
+
+---
+# ClusterRole with permissions to restart deployments
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: n8n-restart-agent
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
+  resourceNames: ["n8n", "n8n-runner"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: n8n-restart-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: n8n-restart-agent
+subjects:
+- kind: ServiceAccount
+  name: n8n-restart-agent
+  namespace: n8n
+
+---
+# CronJob that restarts deployments at 4am every day
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: n8n-restart
+  namespace: n8n
+spec:
+  # Run at 4:00 AM UTC+05:30 every day
+  schedule: "30 22 * * *"
+  
+  # Keep last 3 successful and 1 failed job for debugging
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: n8n-restart
+        spec:
+          serviceAccountName: n8n-restart-agent
+          restartPolicy: OnFailure
+          
+          containers:
+          - name: restart-agent
+            image: bitnami/kubectl:latest
+            
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== n8n Deployment Restart ==="
+              echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+              echo ""
+              
+              echo "Restarting n8n deployment..."
+              kubectl rollout restart deployment/n8n -n ${NAMESPACE}
+              
+              echo "Restarting n8n-runner deployment..."
+              kubectl rollout restart deployment/n8n-runner -n ${NAMESPACE}
+              
+              echo ""
+              echo "Both deployments restarted successfully"
+            
+            env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "500m"
