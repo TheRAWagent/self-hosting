@@ -40,56 +40,138 @@ kind: CronJob
 metadata:
   name: n8n-restart
   namespace: n8n
+  labels:
+    app: n8n-restart
+    version: v1
+  annotations:
+    description: "Restarts n8n and n8n-runner deployments daily at 4:00 AM UTC+05:30"
+
 spec:
-  # Run at 4:00 AM UTC+05:30 every day
-  schedule: "30 22 * * *"
+  # 4:00 AM IST daily; schedule is evaluated in the timeZone below
+  schedule: "0 4 * * *"
+  timeZone: "Asia/Kolkata"
   
-  # Keep last 3 successful and 1 failed job for debugging
+  # Keep history for debugging and audit trails
   successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  
+  # Pause the CronJob if needed (change to true to disable)
+  suspend: false
   
   jobTemplate:
+    metadata:
+      labels:
+        app: n8n-restart
     spec:
+      # Timeout after 5 minutes - prevents hanging jobs
+      activeDeadlineSeconds: 300
+      
+      # Retry failed jobs once
       backoffLimit: 1
+      
+      # Clean up job after 1 hour
+      ttlSecondsAfterFinished: 3600
+      
       template:
         metadata:
           labels:
             app: n8n-restart
+          annotations:
+            description: "Job instance for n8n deployment restart"
         spec:
           serviceAccountName: n8n-restart-agent
-          restartPolicy: OnFailure
+          
+          # Don't restart the container - let the CronJob handle retries
+          restartPolicy: Never
+          
+          # Run as non-root for security
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534  # nobody user
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
           
           containers:
           - name: restart-agent
-            image: bitnami/kubectl:latest
+            # Pin to specific version instead of 'latest'
+            image: bitnami/kubectl:1.28.0
+            imagePullPolicy: IfNotPresent
             
             command:
             - /bin/sh
             - -c
             - |
+              set -euo pipefail
+              
               echo "=== n8n Deployment Restart ==="
               echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+              echo "Namespace: ${NAMESPACE}"
               echo ""
               
+              # Function to handle errors
+              handle_error() {
+                echo "ERROR: $1" >&2
+                exit 1
+              }
+              
+              # Verify connectivity
+              echo "Verifying API connectivity..."
+              kubectl version --client || handle_error "Failed to verify kubectl connectivity"
+              echo ""
+              
+              # Restart n8n deployment
               echo "Restarting n8n deployment..."
-              kubectl rollout restart deployment/n8n -n ${NAMESPACE}
+              kubectl rollout restart deployment/n8n -n "${NAMESPACE}" || handle_error "Failed to restart n8n deployment"
               
-              echo "Restarting n8n-runner deployment..."
-              kubectl rollout restart deployment/n8n-runner -n ${NAMESPACE}
+              # Wait for rollout to complete
+              echo "Waiting for n8n rollout to complete..."
+              kubectl rollout status deployment/n8n -n "${NAMESPACE}" --timeout=120s || handle_error "n8n rollout status check failed"
               
               echo ""
-              echo "Both deployments restarted successfully"
+              
+              # Restart n8n-runner deployment
+              echo "Restarting n8n-runner deployment..."
+              kubectl rollout restart deployment/n8n-runner -n "${NAMESPACE}" || handle_error "Failed to restart n8n-runner deployment"
+              
+              # Wait for rollout to complete
+              echo "Waiting for n8n-runner rollout to complete..."
+              kubectl rollout status deployment/n8n-runner -n "${NAMESPACE}" --timeout=120s || handle_error "n8n-runner rollout status check failed"
+              
+              echo ""
+              echo "✓ Both deployments restarted successfully"
+              echo "Completion time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             
             env:
             - name: NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            # kubectl writes its discovery cache under $HOME, which must be
+            # writable when the root filesystem is read-only
+            - name: HOME
+              value: /tmp
+            
+            # Security context for container
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
             
             resources:
               requests:
                 memory: "64Mi"
-                cpu: "100m"
+                cpu: "50m"
               limits:
                 memory: "256Mi"
                 cpu: "500m"
+
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+          volumes:
+          - name: tmp
+            emptyDir: {}
