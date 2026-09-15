@@ -1,0 +1,93 @@
+# Docker-in-Docker worker that actually creates and runs the code sandboxes.
+# SECURITY: runs privileged, which is equivalent to root on the node.
+# Never expose its ports via LoadBalancer / hostPort.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-runner-1
+  namespace: n8n
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandbox-runner-1
+  template:
+    metadata:
+      labels:
+        app: sandbox-runner-1
+    spec:
+      initContainers:
+      - name: wait-for-certs
+        image: busybox:1.36
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c"]
+        args:
+        - until [ -f /tls/runner/grpc-client.crt ]; do echo "waiting for certs"; sleep 3; done
+        volumeMounts:
+        - name: sandbox-tls
+          mountPath: /tls
+      containers:
+      - name: sandbox-runner
+        image: ghcr.io/n8n-io/n8n-sandbox-service-runner-dind:1.2.0
+        imagePullPolicy: IfNotPresent
+        # Required to nest Docker inside the container (DinD)
+        securityContext:
+          privileged: true
+        env:
+        # Keys the runner accepts from the API; must include the value of
+        # the API's SANDBOX_API_RUNNER_API_KEY
+        - name: SANDBOX_RUNNER_API_KEYS
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: sandbox-api-runner-api-key
+        - name: SANDBOX_RUNNER_REGISTRATION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: sandbox-api-runner-registration-token
+        - name: SANDBOX_RUNNER_API_GRPC_ADDR
+          value: sandbox-api:9090
+        - name: SANDBOX_RUNNER_HTTP_BASE_URL
+          value: http://sandbox-runner-1:8080
+        - name: SANDBOX_RUNNER_CONTROL_GRPC_LISTEN_ADDR
+          value: ":9091"
+        - name: SANDBOX_RUNNER_CONTROL_GRPC_ADVERTISE_ADDR
+          value: sandbox-runner-1:9091
+        - name: SANDBOX_RUNNER_ID
+          value: runner-1
+        - name: SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE
+          value: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:latest
+        - name: SANDBOX_RUNNER_REGISTRATION_GRPC_CA_FILE
+          value: /tls/runner/ca.crt
+        - name: SANDBOX_RUNNER_REGISTRATION_GRPC_CERT_FILE
+          value: /tls/runner/grpc-client.crt
+        - name: SANDBOX_RUNNER_REGISTRATION_GRPC_KEY_FILE
+          value: /tls/runner/grpc-client.key
+        - name: SANDBOX_RUNNER_REGISTRATION_GRPC_SERVER_NAME
+          value: sandbox-api
+        - name: SANDBOX_RUNNER_CONTROL_GRPC_TLS_CERT_FILE
+          value: /tls/runner/control-grpc-server.crt
+        - name: SANDBOX_RUNNER_CONTROL_GRPC_TLS_KEY_FILE
+          value: /tls/runner/control-grpc-server.key
+        - name: SANDBOX_RUNNER_CONTROL_GRPC_TLS_CLIENT_CA_FILE
+          value: /tls/runner/ca.crt
+        ports:
+        - containerPort: 8080
+        - containerPort: 9091
+        volumeMounts:
+        - name: sandbox-tls
+          mountPath: /tls
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+      volumes:
+      - name: sandbox-tls
+        persistentVolumeClaim:
+          claimName: sandbox-tls-pvc
+          readOnly: true

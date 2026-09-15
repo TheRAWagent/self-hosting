@@ -1,0 +1,14 @@
+# Internal-only: n8n reaches it at http://searxng:8080. Never expose to LAN.
+apiVersion: v1
+kind: Service
+metadata:
+  name: searxng
+  namespace: n8n
+spec:
+  type: ClusterIP
+  selector:
+    app: searxng
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080

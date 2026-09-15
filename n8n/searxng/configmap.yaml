@@ -1,0 +1,14 @@
+# The stock SearXNG image only serves HTML; n8n's web search needs the JSON
+# API, which this file enables.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-settings
+  namespace: n8n
+data:
+  settings.yml: |
+    use_default_settings: true
+    search:
+      formats:
+        - html
+        - json

@@ -1,0 +1,43 @@
+# One-shot Job that generates the mTLS certs (CA + server/client keys) the
+# sandbox-api and sandbox-runner pods need to talk to each other. Runs once
+# per namespace; re-apply after deleting it to regenerate certs, then restart
+# the sandbox deployments (certs do not autorenew).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sandbox-certs
+  namespace: n8n
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: sandbox-certs
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: sandbox-certs
+        image: ghcr.io/n8n-io/n8n-sandbox-service-api:1.2.0
+        imagePullPolicy: IfNotPresent
+        # Mirrors the compose entrypoint: generate certs world-readable so
+        # the runner (a different UID) can read its copy off the shared PVC
+        command: ["sh", "-c"]
+        args:
+        - >
+          bootstrap-mtls.sh --out-dir /tls --api-san sandbox-api
+          --control-san-prefix sandbox-runner --world-readable &&
+          chown -R sandbox-api:sandbox-api /tls/api && chmod -R a+rX /tls
+        env:
+        - name: NUM_RUNNERS
+          value: "1"
+        securityContext:
+          # Cert generation needs root to chown files
+          runAsUser: 0
+          runAsGroup: 0
+        volumeMounts:
+        - name: sandbox-tls
+          mountPath: /tls
+      volumes:
+      - name: sandbox-tls
+        persistentVolumeClaim:
+          claimName: sandbox-tls-pvc

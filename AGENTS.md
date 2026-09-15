@@ -68,8 +68,12 @@ n8n is deployed in **external runners mode** (`N8N_RUNNERS_MODE=external`), whic
 - **n8n main** (`deployment.yaml`): serves UI/API on port 5678 and a task broker on 5679. Stores data in Postgres, persists files to a 10Gi PVC at `/home/node/.n8n`.
 - **n8n-runner** (`runner/deployment.yaml`): a separate Deployment (image `n8nio/runners:stable`) that connects to the broker at `http://n8n:5679` using a shared `N8N_RUNNERS_AUTH_TOKEN` from `n8n-secrets`. It is the component that actually executes workflow nodes.
 - **postgres** (`postgres/`): a StatefulSet running `postgres:18`. An init script (`postgres/init-script.yaml`, mounted at `/docker-entrypoint-initdb.d`) creates a **non-root user** that n8n uses (the main `POSTGRES_USER` is the root/admin). n8n's `DB_POSTGRESDB_USER`/`PASSWORD` reference the non-root secret keys, while Postgres's `POSTGRES_USER`/`POSTGRES_PASSWORD` reference the root keys. Keep these two pairs straight when editing secrets.
+- **sandbox** (`sandbox/`): the n8n Assistant sandbox stack (mirrors n8n's compose file). A one-shot Job (`certs-job.yaml`) generates mTLS certs into `sandbox-tls-pvc`; `sandbox-api` (Deployment, ports 8080 HTTP / 9090 gRPC) is the control plane n8n calls at `http://sandbox-api:8080`; `sandbox-runner-1` (Deployment, **privileged Docker-in-Docker**) runs the per-execution sandbox containers. The runner's Service/pod name must stay `sandbox-runner-1` — it matches the TLS cert SANs and the addresses the runner advertises. Apply the certs Job first and wait for it to complete before the sandbox Deployments.
+- **searxng** (`searxng/`): SearXNG web-search backend for the Assistant with its JSON API enabled via the `searxng-settings` ConfigMap; n8n reaches it at `http://searxng:8080` (`N8N_INSTANCE_AI_SEARXNG_URL`).
 
-The runner is horizontally scalable; the main n8n Deployment and Postgres are not (single replica, RWO PVCs).
+The runner is horizontally scalable; the main n8n Deployment and Postgres are not (single replica, RWO PVCs). The sandbox pods are also single-replica: they share the RWO `sandbox-tls-pvc`, so all three sandbox pods must land on the same node (fine on single-node MicroK8s).
+
+**Security invariants for the sandbox stack:** `sandbox-runner-1` runs privileged (equivalent to root on the node) and neither `sandbox-api` nor `sandbox-runner-1`/`searxng` Services are ever LoadBalancer-exposed. The sandbox only ever receives `SANDBOX_API_KEYS` and the runner registration/API keys — the n8n encryption key, Postgres passwords, and model API keys never reach sandbox containers. `N8N_SANDBOX_SERVICE_API_KEY` must appear in the `sandbox-api-keys` secret key (comma-separated list).
 
 ## pihole Architecture Notes
 

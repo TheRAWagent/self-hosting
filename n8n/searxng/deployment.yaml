@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: searxng
+  namespace: n8n
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: searxng
+  template:
+    metadata:
+      labels:
+        app: searxng
+    spec:
+      containers:
+      - name: searxng
+        image: ghcr.io/searxng/searxng:latest
+        imagePullPolicy: Always
+        env:
+        - name: SEARXNG_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: searxng-secret
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        volumeMounts:
+        # subPath so the image's other files in /etc/searxng stay intact
+        - name: searxng-settings
+          mountPath: /etc/searxng/settings.yml
+          subPath: settings.yml
+          readOnly: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: searxng-settings
+        configMap:
+          name: searxng-settings

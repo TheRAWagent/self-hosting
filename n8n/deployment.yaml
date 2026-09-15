@@ -55,6 +55,32 @@ spec:
               key: n8n-runners-auth-token
         - name: N8N_RUNNERS_BROKER_LISTEN_ADDRESS
           value: "0.0.0.0"
+        # n8n Assistant: sandbox for AI-generated code + SearXNG web search
+        - name: N8N_INSTANCE_AI_SANDBOX_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: n8n-config
+              key: n8n-instance-ai-sandbox-enabled
+        - name: N8N_SANDBOX_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: n8n-config
+              key: n8n-sandbox-service-url
+        - name: N8N_SANDBOX_SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: n8n-sandbox-service-api-key
+        - name: N8N_INSTANCE_AI_SEARXNG_URL
+          valueFrom:
+            configMapKeyRef:
+              name: n8n-config
+              key: n8n-instance-ai-searxng-url
+        - name: NODE_FUNCTIONS_ALLOW_EXTERNAL
+          valueFrom:
+            configMapKeyRef:
+              name: n8n-config
+              key: node-functions-allow-external
         resources:
           limits:
             memory: "2Gi"

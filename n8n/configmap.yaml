@@ -3,5 +3,8 @@ kind: ConfigMap
 metadata:
   name: n8n-config
 data:
-  n8n-version: "stable"
-  node-functions-allow-external: "cheerio"
+  # Keys are env var names read by the n8n Deployment via configMapKeyRef
+  node-functions-allow-external: "cheerio,instance-ai"
+  n8n-instance-ai-sandbox-enabled: "true"
+  n8n-sandbox-service-url: "http://sandbox-api:8080"
+  n8n-instance-ai-searxng-url: "http://searxng:8080"
